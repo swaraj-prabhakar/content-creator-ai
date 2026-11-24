@@ -1,12 +1,13 @@
 # Posts queued Instagram Reels (draft releases of this repo) at the channel's slots.
 # Managed by the Entertainer app (python -m entertainer instagram setup) - edit there, not here.
-# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. GitHub cron is best-effort (on 2026-11-24 both
-# the slot run and its catch-up were silently dropped), so this checks the queue every 15 minutes: each run posts
-# anything due within LEAD_MIN (uploads early, waits for the slot) or overdue. Idle runs take ~15 s (free: public repo).
+# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. GitHub's cron never fired for this repo
+# (2026-11-24), so each run is a RELAY: it stays alive ~5 h posting reels as they come due (upload 20 min early, publish
+# at the slot), then dispatches the next run of itself (workflow_dispatch from GITHUB_TOKEN is allowed to trigger
+# runs). The cron below only restarts the chain if it ever breaks. Free: public repo.
 name: post-reels
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7 */3 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -18,10 +19,11 @@ concurrency:
   cancel-in-progress: false
 permissions:
   contents: write
+  actions: write
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
       - name: Post due reels
@@ -31,4 +33,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           LEAD_MIN: "20"
+          RELAY_HOURS: "5"
         run: python3 post_reels.py
+      - name: Start the next relay run
+        if: ${{ always() && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run post-reels.yml --repo "$GITHUB_REPOSITORY" --ref main
