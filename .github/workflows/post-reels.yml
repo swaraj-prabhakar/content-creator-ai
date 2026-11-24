@@ -14,6 +14,10 @@ on:
         description: "Only check the token and list the queue (post nothing)"
         type: boolean
         default: false
+      relay_hours:
+        description: "How long this run stays alive posting reels (then it starts the next run)"
+        type: string
+        default: "5"
 concurrency:
   group: post-reels
   cancel-in-progress: false
@@ -33,7 +37,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           LEAD_MIN: "20"
-          RELAY_HOURS: "5"
+          RELAY_HOURS: ${{ inputs.relay_hours || '5' }}
         run: python3 post_reels.py
       - name: Start the next relay run
         if: ${{ always() && !inputs.dry_run }}
