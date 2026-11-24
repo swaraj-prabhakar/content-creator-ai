@@ -1,18 +1,12 @@
 # Posts queued Instagram Reels (draft releases of this repo) at the channel's slots.
 # Managed by the Entertainer app (python -m entertainer instagram setup) - edit there, not here.
-# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. Cron is UTC and starts 20 min early so the
-# upload is processed before the slot; a catch-up run 40 min after each slot covers delayed or dropped schedules.
+# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. GitHub cron is best-effort (on 2026-11-24 both
+# the slot run and its catch-up were silently dropped), so this checks the queue every 15 minutes: each run posts
+# anything due within LEAD_MIN (uploads early, waits for the slot) or overdue. Idle runs take ~15 s (free: public repo).
 name: post-reels
 on:
   schedule:
-    - cron: "10 2 * * 1-5"    # 08:00 IST weekdays
-    - cron: "40 14 * * 1-5"   # 20:30 IST weekdays
-    - cron: "40 4 * * 0,6"    # 10:30 IST weekends
-    - cron: "40 12 * * 0,6"   # 18:30 IST weekends
-    - cron: "10 3 * * 1-5"    # catch-ups
-    - cron: "40 15 * * 1-5"
-    - cron: "40 5 * * 0,6"
-    - cron: "40 13 * * 0,6"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
