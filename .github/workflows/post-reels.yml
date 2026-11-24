@@ -38,7 +38,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           LEAD_MIN: "20"
           RELAY_HOURS: ${{ inputs.relay_hours || '5' }}
-        run: python3 post_reels.py
+        run: python3 -u post_reels.py
       - name: Start the next relay run
         if: ${{ always() && !inputs.dry_run }}
         env:
