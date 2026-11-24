@@ -220,5 +220,37 @@ def run(dry: bool = False, lead_min: int = 20) -> int:
     return 1 if failures else 0
 
 
+def next_due() -> datetime | None:
+    """publish_at of the earliest reel still waiting."""
+    q = Queue(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"])
+    ts = [_utc(i["meta"]["publish_at"]) for i in q.items() if i["meta"].get("status") in ("queued", "failed")
+          and i["meta"].get("attempts", 0) < MAX_ATTEMPTS]
+    return min(ts) if ts else None
+
+
+def relay(hours: float, lead_min: int = 20, poll_min: int = 10) -> int:
+    """Stay alive for `hours`, posting each reel when it comes due (GitHub's cron is best-effort and may never fire,
+    so the workflow re-dispatches itself after this returns). Errors are logged and retried, never fatal."""
+    deadline, failures = time.time() + hours * 3600, 0
+    while True:
+        try:
+            failures += run(lead_min=lead_min)
+            nxt = next_due()
+        except Exception as e:
+            print(f"run failed: {e}"); failures += 1; nxt = None
+        left = deadline - time.time()
+        if left <= 60:
+            break
+        wake = poll_min * 60 if nxt is None else (nxt - timedelta(minutes=lead_min) - datetime.now(timezone.utc)).total_seconds()
+        wake = max(30.0, min(wake, poll_min * 6 * 60 if nxt else poll_min * 60, left))
+        print(f"next reel {nxt and nxt.isoformat()}; sleeping {wake / 60:.1f} min")
+        time.sleep(wake)
+        if time.time() >= deadline:
+            break
+    return 1 if failures else 0
+
+
 if __name__ == "__main__":
-    sys.exit(run(dry=os.getenv("DRY_RUN", "0") in ("1", "true"), lead_min=int(os.getenv("LEAD_MIN", "20"))))
+    dry, lead = os.getenv("DRY_RUN", "0") in ("1", "true"), int(os.getenv("LEAD_MIN", "20"))
+    hours = float(os.getenv("RELAY_HOURS", "0") or 0)
+    sys.exit(relay(hours, lead) if hours > 0 and not dry else run(dry=dry, lead_min=lead))
