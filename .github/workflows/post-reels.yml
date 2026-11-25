@@ -1,9 +1,10 @@
 # Posts queued Instagram Reels (draft releases of this repo) at the channel's slots.
 # Managed by the Entertainer app (python -m entertainer instagram setup) - edit there, not here.
-# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. GitHub's cron never fired for this repo
-# (2026-11-24), so each run is a RELAY: it stays alive ~5 h posting reels as they come due (upload 20 min early, publish
-# at the slot), then dispatches the next run of itself (workflow_dispatch from GITHUB_TOKEN is allowed to trigger
-# runs). The cron below only restarts the chain if it ever breaks. Free: public repo.
+# Slots (IST): Mon-Fri 8:00 AM + 8:30 PM, Sat/Sun 10:30 AM + 6:30 PM. GitHub's cron is unreliable for this repo, so the
+# trigger is an EXTERNAL pinger (cron-job.org, since 2026-11-25) that POSTs workflow_dispatch every 15 min. Each run is a
+# single pass: post every reel due within LEAD_MIN (upload early, publish at the slot), then exit. relay_hours > 0 keeps
+# the old relay mode (stay alive, then dispatch the next run) as a fallback if the pinger is ever gone. The cron below
+# is only a best-effort backup (single pass). Free: public repo.
 name: post-reels
 on:
   schedule:
@@ -15,9 +16,9 @@ on:
         type: boolean
         default: false
       relay_hours:
-        description: "How long this run stays alive posting reels (then it starts the next run)"
+        description: "0 = single pass (normal). >0 = stay alive this many hours, then start the next run (relay mode)"
         type: string
-        default: "5"
+        default: "0"
 concurrency:
   group: post-reels
   cancel-in-progress: false
@@ -37,10 +38,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           LEAD_MIN: "20"
-          RELAY_HOURS: ${{ inputs.relay_hours || '5' }}
+          RELAY_HOURS: ${{ inputs.relay_hours || '0' }}
         run: python3 -u post_reels.py
       - name: Start the next relay run
-        if: ${{ always() && !inputs.dry_run }}
+        if: ${{ always() && !inputs.dry_run && inputs.relay_hours != '' && inputs.relay_hours != '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run post-reels.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: gh workflow run post-reels.yml --repo "$GITHUB_REPOSITORY" --ref main -f relay_hours="${{ inputs.relay_hours }}"
